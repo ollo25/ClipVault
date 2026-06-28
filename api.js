@@ -12,8 +12,9 @@ export function setTwitchCredentials(clientId, token) {
 export function getTwitchToken() { return _token; }
 export function getTwitchClientId() { return _clientId; }
 
-async function twitchFetch(url) {
+async function twitchFetch(url, signal) {
   const res = await fetch(url, {
+    signal,
     headers: {
       'Client-Id': _clientId,
       'Authorization': `Bearer ${_token}`,
@@ -25,15 +26,16 @@ async function twitchFetch(url) {
     const reset  = res.headers.get('Ratelimit-Reset');
     const waitMs = reset ? (parseInt(reset) * 1000 - Date.now() + 500) : 1500;
     await new Promise(r => setTimeout(r, waitMs));
-    return twitchFetch(url); // retry
+    return twitchFetch(url, signal); // retry
   }
   if (!res.ok) throw new Error(`HTTP_${res.status}`);
   return res.json();
 }
 
-export async function getBroadcasterInfo(login) {
+export async function getBroadcasterInfo(login, signal) {
   const d = await twitchFetch(
-    `https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`
+    `https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`,
+    signal
   );
   if (!d.data || d.data.length === 0) throw new Error(`Chaîne introuvable : ${login}`);
   return d.data[0];
@@ -56,7 +58,7 @@ export async function validateToken() {
 
 // ── Fetch de tous les clips avec fenêtres + subdivision ──────────────────────
 
-export async function fetchAllClips(broadcasterId, channelCreatedAt, { onProgress, onLog } = {}) {
+export async function fetchAllClips(broadcasterId, channelCreatedAt, { onProgress, onLog, signal } = {}) {
   const log = (level, msg) => onLog?.(level, msg);
   const progress = (msg, count) => onProgress?.(msg, count);
 
@@ -79,7 +81,7 @@ export async function fetchAllClips(broadcasterId, channelCreatedAt, { onProgres
               + `&started_at=${winStart.toISOString()}&ended_at=${winEnd.toISOString()}`;
       if (cursor) url += `&after=${cursor}`;
 
-      const d = await twitchFetch(url);
+      const d = await twitchFetch(url, signal);
       windowClips.push(...d.data);
       log('info', `  [${label}] page ${pageNum} → ${d.data.length} clips (cursor: ${d.pagination?.cursor ? 'oui' : 'non'}) · fenêtre: ${windowClips.length}`);
 
@@ -89,6 +91,7 @@ export async function fetchAllClips(broadcasterId, channelCreatedAt, { onProgres
       }
       cursor = d.pagination.cursor;
       await new Promise(r => setTimeout(r, 60));
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     }
 
     // Détection token expiré silencieux
@@ -102,6 +105,7 @@ export async function fetchAllClips(broadcasterId, channelCreatedAt, { onProgres
   }
 
   async function processWindow(winStart, winEnd, depth = 0) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const label  = `${winStart.toISOString().slice(0,10)} → ${winEnd.toISOString().slice(0,10)}`;
     const indent = '  '.repeat(depth);
     log('info', `${indent}Fenêtre [${label}]`);
@@ -124,6 +128,7 @@ export async function fetchAllClips(broadcasterId, channelCreatedAt, { onProgres
       log('success', `${indent}+${added} clips [${label}] · total: ${clips.length}`);
     }
     await new Promise(r => setTimeout(r, 60));
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   }
 
   // Construire les fenêtres initiales

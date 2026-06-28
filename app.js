@@ -144,9 +144,15 @@ $('btn-delete-data').addEventListener('click', async () => {
 });
 
 // ── Chargement clips ──────────────────────────────────────────────────────────
+let currentLoad = null;
+
 async function load() {
   const channel = channelInput.value.trim();
   if (!channel) { channelInput.focus(); return; }
+
+  if (currentLoad) currentLoad.abort();
+  currentLoad = new AbortController();
+  const { signal } = currentLoad;
 
   loadBtn.disabled = true;
   state.allClips = [];
@@ -157,10 +163,11 @@ async function load() {
   try {
     setState('loading', 'Recherche de la chaîne…');
 
-    const info  = await getBroadcasterInfo(channel);
+    const info  = await getBroadcasterInfo(channel, signal);
     const clips = await fetchAllClips(info.id, info.created_at, {
       onProgress: (msg, count) => setState('loading', msg, count),
       onLog: () => {},
+      signal,
     });
 
     if (clips.length === 0) {
@@ -183,6 +190,7 @@ async function load() {
     applyFilters();
 
   } catch (e) {
+    if (e.name === 'AbortError') return;
     if (e.message === 'TOKEN_EXPIRED') {
       setState('error', 'Token Twitch expiré. <a href="#" id="reauth-link">Reconnecter Twitch</a>');
       document.getElementById('reauth-link')?.addEventListener('click', ev => {
@@ -193,7 +201,7 @@ async function load() {
       setState('error', escHtml(e.message));
     }
   } finally {
-    loadBtn.disabled = false;
+    if (!signal.aborted) loadBtn.disabled = false;
   }
 }
 
