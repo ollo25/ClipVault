@@ -1,7 +1,7 @@
 // ─── Application principale ───────────────────────────────────────────────────
-import { isLoggedIn, getSession, signOut, handleTwitchCallback, startTwitchOAuth } from './auth.js';
+import { isLoggedIn, signOut, handleTwitchCallback, startTwitchOAuth, loginWithTwitchUser } from './auth.js';
 import { getProfile, saveProfile, getFavoriteIds, addFavorite, removeFavorite } from './db.js';
-import { setTwitchCredentials, getBroadcasterInfo, fetchAllClips, validateToken } from './api.js';
+import { setTwitchCredentials, getBroadcasterInfo, fetchAllClips, validateToken, getTwitchUser } from './api.js';
 import { TWITCH_CLIENT_ID } from './config.js';
 
 // ── État global ───────────────────────────────────────────────────────────────
@@ -12,7 +12,6 @@ const state = {
   currentSort:   'time',
   currentOrder:  'desc',
   searchMode:    'all',
-  reversed:      false,
   cols:          1,
   renderedCards: new Map(),
   profile:       null,
@@ -20,101 +19,61 @@ const state = {
 
 // ── Constantes virtual scroll ─────────────────────────────────────────────────
 const CARD_W   = 300;
-const CARD_H   = 250; // thumb 169px + body
+const CARD_H   = 250;
 const CARD_GAP = 16;
 const OVERSCAN = 3;
 
 // ── Éléments DOM ─────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
-// Pages
-const pageAuth    = $('page-auth');
-const pageSetup   = $('page-setup');
-const pageApp     = $('page-app');
+const pageAuth  = $('page-auth');
+const pageApp   = $('page-app');
 
-// Auth
-const tabLogin    = $('tab-login');
-const tabSignup   = $('tab-signup');
-const formLogin   = $('form-login');
-const formSignup  = $('form-signup');
-
-// Setup (credentials Twitch)
-const setupForm   = $('setup-form');
-
-// App header
-const userEmail   = $('user-email');
 const btnLogout   = $('btn-logout');
-const btnSetup    = $('btn-setup');
 const btnFavs     = $('btn-favs');
 const favCountEl  = $('fav-count');
 const countBadge  = $('count-badge');
-
-// Chaîne
 const channelInput= $('channel-input');
 const loadBtn     = $('btn-load');
-
-// Filtres
 const filterBar   = $('filter-bar');
 const filterSearch= $('filter-search');
 const filterFrom  = $('filter-date-from');
 const filterTo    = $('filter-date-to');
 const filterCount = $('filter-count');
 const clearBtn    = $('btn-clear-filters');
-
-// Grille
 const stateEl     = $('state');
 const gridWrap    = $('grid-wrap');
 const gridContainer=$('grid-container');
 const gridEl      = $('grid');
-
-// Favoris
 const favsView    = $('favs-view');
 const favsGrid    = $('favs-grid');
 
-// Logs
-const logPanel    = $('log-panel');
-const logBody     = $('log-body');
-const logToggle   = $('log-toggle');
-
-// ── Logs ──────────────────────────────────────────────────────────────────────
-const logEntries = [];
-let logWarnCount = 0, logErrorCount = 0;
-
-function log(level, msg) {
-  const ts = new Date().toISOString().slice(11, 23);
-  logEntries.push({ ts, level, msg });
-  const line = document.createElement('div');
-  line.className = `log-line ${level}`;
-  line.innerHTML = `<span class="log-ts">${ts}</span>${escHtml(msg)}`;
-  logBody.appendChild(line);
-  logBody.scrollTop = logBody.scrollHeight;
-  if (level === 'warn')  logWarnCount++;
-  if (level === 'error') logErrorCount++;
-  updateLogToggle();
-}
-
-function updateLogToggle() {
-  logToggle.textContent = `📋 Logs (${logEntries.length})`;
-  logToggle.className = logErrorCount > 0 ? 'has-error' : logWarnCount > 0 ? 'has-warn' : '';
-}
-
 // ── Navigation entre pages ────────────────────────────────────────────────────
 function showPage(page) {
-  [pageAuth, pageSetup, pageApp].forEach(p => p.classList.remove('active'));
+  [pageAuth, pageApp].forEach(p => p.classList.remove('active'));
   page.classList.add('active');
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  // Vérifier si on revient d'un OAuth Twitch
+  // Retour OAuth Twitch
   const twitchToken = handleTwitchCallback();
-  if (twitchToken && isLoggedIn()) {
+  if (twitchToken) {
+    setTwitchCredentials(TWITCH_CLIENT_ID, twitchToken);
     try {
-      await saveProfile({ twitch_client_id: TWITCH_CLIENT_ID, twitch_token: twitchToken });
-      showToast('Compte Twitch lié avec succès !', 'success');
+      const user = await getTwitchUser();
+      await loginWithTwitchUser(user.id);
+      await saveProfile({ twitch_token: twitchToken });
+      state.profile = await getProfile();
     } catch (e) {
-      showToast('Erreur lors de la sauvegarde du token Twitch', 'error');
+      showToast('Erreur de connexion : ' + e.message, 'error');
+      showPage(pageAuth);
+      return;
     }
+    state.favoriteIds = await getFavoriteIds().catch(() => new Set());
+    updateFavBadge();
+    showPage(pageApp);
+    return;
   }
 
   if (!isLoggedIn()) {
@@ -122,87 +81,35 @@ async function init() {
     return;
   }
 
-  // Charger le profil
   try {
     state.profile = await getProfile();
-  } catch (e) {
+  } catch {
     showPage(pageAuth);
     return;
   }
 
-  // Vérifier si le profil a les credentials Twitch
-  if (!state.profile?.twitch_token || !state.profile?.twitch_client_id) {
-    setupCredentials();
+  const token = state.profile?.twitch_token;
+  if (!token) {
+    startTwitchOAuth();
     return;
   }
 
-  // Valider le token Twitch
-  setTwitchCredentials(state.profile.twitch_client_id, state.profile.twitch_token);
+  setTwitchCredentials(TWITCH_CLIENT_ID, token);
   const valid = await validateToken();
   if (!valid) {
-    showPage(pageSetup);
-    $('setup-msg').textContent = 'Ton token Twitch a expiré. Reconnecte-toi à Twitch.';
+    showToast('Session Twitch expirée, reconnexion…', 'info');
+    setTimeout(startTwitchOAuth, 1500);
+    showPage(pageAuth);
     return;
   }
 
-  // Charger les favoris
   state.favoriteIds = await getFavoriteIds().catch(() => new Set());
   updateFavBadge();
-
-  // Afficher l'app
-  const session = getSession();
-  userEmail.textContent = session.user.email;
   showPage(pageApp);
 }
 
-function setupCredentials() {
-  showPage(pageSetup);
-}
-
 // ── Auth handlers ─────────────────────────────────────────────────────────────
-tabLogin.addEventListener('click', () => {
-  tabLogin.classList.add('active'); tabSignup.classList.remove('active');
-  formLogin.classList.remove('hidden'); formSignup.classList.add('hidden');
-});
-tabSignup.addEventListener('click', () => {
-  tabSignup.classList.add('active'); tabLogin.classList.remove('active');
-  formSignup.classList.remove('hidden'); formLogin.classList.add('hidden');
-});
-
-$('btn-login').addEventListener('click', async () => {
-  const email = $('login-email').value.trim();
-  const pass  = $('login-pass').value;
-  if (!email || !pass) return showFormError('login-error', 'Remplis tous les champs');
-  try {
-    $('btn-login').disabled = true;
-    const { signIn } = await import('./auth.js');
-    await signIn(email, pass);
-    await init();
-  } catch (e) {
-    showFormError('login-error', e.message);
-  } finally {
-    $('btn-login').disabled = false;
-  }
-});
-
-$('btn-signup').addEventListener('click', async () => {
-  const email = $('signup-email').value.trim();
-  const pass  = $('signup-pass').value;
-  const pass2 = $('signup-pass2').value;
-  if (!email || !pass) return showFormError('signup-error', 'Remplis tous les champs');
-  if (pass !== pass2) return showFormError('signup-error', 'Les mots de passe ne correspondent pas');
-  if (pass.length < 6) return showFormError('signup-error', 'Mot de passe trop court (6 caractères min)');
-  try {
-    $('btn-signup').disabled = true;
-    const { signUp } = await import('./auth.js');
-    await signUp(email, pass);
-    showFormError('signup-error', '✓ Compte créé ! Vérifie ton email puis connecte-toi.', 'success');
-  } catch (e) {
-    showFormError('signup-error', e.message);
-  } finally {
-    $('btn-signup').disabled = false;
-  }
-});
+$('btn-twitch-login').addEventListener('click', startTwitchOAuth);
 
 btnLogout.addEventListener('click', async () => {
   await signOut();
@@ -210,40 +117,6 @@ btnLogout.addEventListener('click', async () => {
   state.filteredClips = [];
   state.profile = null;
   showPage(pageAuth);
-});
-
-btnSetup.addEventListener('click', () => showPage(pageSetup));
-
-// ── Setup Twitch ──────────────────────────────────────────────────────────────
-setupForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const clientId = $('setup-client-id').value.trim();
-  const token    = $('setup-token').value.trim();
-  if (!clientId || !token) return;
-
-  try {
-    $('btn-setup-save').disabled = true;
-    setTwitchCredentials(clientId, token);
-    const valid = await validateToken();
-    if (!valid) {
-      showFormError('setup-error', 'Token invalide ou expiré — génère-en un nouveau');
-      return;
-    }
-    await saveProfile({ twitch_client_id: clientId, twitch_token: token });
-    state.profile = { ...state.profile, twitch_client_id: clientId, twitch_token: token };
-    showToast('Credentials Twitch sauvegardés !', 'success');
-    showPage(pageApp);
-  } catch (e) {
-    showFormError('setup-error', e.message);
-  } finally {
-    $('btn-setup-save').disabled = false;
-  }
-});
-
-$('btn-oauth-twitch').addEventListener('click', startTwitchOAuth);
-
-$('btn-cancel-setup').addEventListener('click', () => {
-  if (state.profile?.twitch_token) showPage(pageApp);
 });
 
 // ── Chargement clips ──────────────────────────────────────────────────────────
@@ -256,21 +129,14 @@ async function load() {
   state.filteredClips = [];
   state.renderedCards.clear();
   gridEl.innerHTML = '';
-  logEntries.length = 0;
-  logWarnCount = 0; logErrorCount = 0;
-  logBody.innerHTML = '';
-  updateLogToggle();
 
   try {
     setState('loading', 'Recherche de la chaîne…');
-    log('info', `=== Chargement : ${channel} ===`);
 
-    const info = await getBroadcasterInfo(channel);
-    log('info', `Chaîne : ${info.display_name} (créée le ${info.created_at?.slice(0,10)})`);
-
+    const info  = await getBroadcasterInfo(channel);
     const clips = await fetchAllClips(info.id, info.created_at, {
       onProgress: (msg, count) => setState('loading', msg, count),
-      onLog: log,
+      onLog: () => {},
     });
 
     if (clips.length === 0) {
@@ -278,12 +144,9 @@ async function load() {
       return;
     }
 
-    // Déduplication finale
     const seen = new Set();
     state.allClips = clips.filter(c => seen.has(c.id) ? false : (seen.add(c.id), true));
-    log('success', `=== ${state.allClips.length} clips uniques ===`);
 
-    // Reset filtres
     resetFilters();
 
     countBadge.textContent   = `${state.allClips.length} clips`;
@@ -291,21 +154,20 @@ async function load() {
     stateEl.style.display    = 'none';
     gridWrap.style.display   = 'block';
     filterBar.classList.add('visible');
-    document.title = `${info.display_name} — Clip Browser`;
+    document.title = `${info.display_name} — ClipVault`;
 
     applyFilters();
 
   } catch (e) {
     if (e.message === 'TOKEN_EXPIRED') {
-      setState('error', 'Token Twitch expiré. <a href="#" id="refresh-token-link">Mettre à jour les credentials</a>');
-      document.getElementById('refresh-token-link')?.addEventListener('click', (ev) => {
+      setState('error', 'Token Twitch expiré. <a href="#" id="reauth-link">Reconnecter Twitch</a>');
+      document.getElementById('reauth-link')?.addEventListener('click', ev => {
         ev.preventDefault();
-        showPage(pageSetup);
+        startTwitchOAuth();
       });
     } else {
       setState('error', escHtml(e.message));
     }
-    log('error', e.message);
   } finally {
     loadBtn.disabled = false;
   }
@@ -476,7 +338,7 @@ function createCard(clip, index) {
       <img class="thumb" src="${clip.thumbnail_url || ''}" alt="" loading="lazy" />
       <span class="duration">${formatDuration(clip.duration)}</span>
       ${index < 3 ? `<span class="rank">#${index + 1}</span>` : ''}
-      <button class="fav-btn${isFav ? ' active' : ''}" data-id="${clip.id}">${isFav ? '⭐' : '☆'}</button>
+      <button class="fav-btn${isFav ? ' active' : ''}" data-id="${clip.id}">${isFav ? '★' : '☆'}</button>
     </div>
     <div class="card-body">
       <div class="card-title">${title}</div>
@@ -513,7 +375,7 @@ async function toggleFav(clip, card) {
     const nowFav = state.favoriteIds.has(clip.id);
     card?.classList.toggle('is-fav', nowFav);
     const btn = card?.querySelector('.fav-btn');
-    if (btn) { btn.textContent = nowFav ? '⭐' : '☆'; btn.classList.toggle('active', nowFav); }
+    if (btn) { btn.textContent = nowFav ? '★' : '☆'; btn.classList.toggle('active', nowFav); }
     updateFavBadge();
     if (favsView.classList.contains('visible')) renderFavsGrid();
   } catch (e) {
@@ -540,7 +402,7 @@ async function renderFavsGrid() {
     const favs = await import('./db.js').then(m => m.getFavorites());
     favsGrid.innerHTML = '';
     if (favs.length === 0) {
-      favsGrid.innerHTML = `<div class="favs-empty"><div class="icon">☆</div><p>Aucun favori.<br>Clique l'étoile sur un clip pour l'ajouter.</p></div>`;
+      favsGrid.innerHTML = `<div class="favs-empty"><p>Aucun favori.<br>Clique l'étoile sur un clip pour l'ajouter.</p></div>`;
       return;
     }
     favs.forEach(({ clip_data }) => {
@@ -572,34 +434,15 @@ function setState(type, msg = '', count = 0) {
   countBadge.style.display = 'none';
   const pct = count > 0 ? Math.min((count / 2000) * 100, 95) : 0;
   if (type === 'idle') {
-    stateEl.innerHTML = `<div class="state-icon">🎮</div><p>Entre un nom de chaîne et clique <strong>Charger</strong></p>`;
+    stateEl.innerHTML = `<p>Entre un nom de chaîne et clique <strong>Charger</strong></p>`;
   } else if (type === 'loading') {
     stateEl.innerHTML = `
-      <div class="state-icon">⏳</div><p>${msg}</p>
+      <p>${msg}</p>
       <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>`;
   } else if (type === 'error') {
-    stateEl.innerHTML = `<div class="state-icon">⚠️</div><p>${msg}</p>`;
+    stateEl.innerHTML = `<p class="state-error">${msg}</p>`;
   }
 }
-
-// ── Logs UI ───────────────────────────────────────────────────────────────────
-logToggle.addEventListener('click', () => {
-  logPanel.classList.toggle('open');
-  if (logPanel.classList.contains('open')) logBody.scrollTop = logBody.scrollHeight;
-});
-$('log-close').addEventListener('click',  () => logPanel.classList.remove('open'));
-$('log-clear').addEventListener('click',  () => {
-  logEntries.length = 0; logWarnCount = 0; logErrorCount = 0;
-  logBody.innerHTML = ''; updateLogToggle();
-});
-$('log-export-btn').addEventListener('click', () => {
-  const txt  = logEntries.map(e => `[${e.ts}] [${e.level.toUpperCase()}] ${e.msg}`).join('\n');
-  const blob = new Blob([txt], { type: 'text/plain' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `logs-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.txt`;
-  a.click(); URL.revokeObjectURL(url);
-});
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
@@ -609,13 +452,6 @@ function showToast(msg, type = 'info') {
   document.body.appendChild(t);
   setTimeout(() => t.classList.add('show'), 10);
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3000);
-}
-
-function showFormError(id, msg, type = 'error') {
-  const el = $(id);
-  if (!el) return;
-  el.textContent = msg;
-  el.className   = `form-msg ${type}`;
 }
 
 function formatDuration(s) {
