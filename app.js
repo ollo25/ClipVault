@@ -94,7 +94,7 @@ function log(level, msg) {
 }
 
 function updateLogToggle() {
-  logToggle.textContent = `📋 Logs (${logEntries.length})`;
+  logToggle.textContent = `Logs (${logEntries.length})`;
   logToggle.className = logErrorCount > 0 ? 'has-error' : logWarnCount > 0 ? 'has-warn' : '';
 }
 
@@ -476,7 +476,7 @@ function createCard(clip, index) {
       <img class="thumb" src="${clip.thumbnail_url || ''}" alt="" loading="lazy" />
       <span class="duration">${formatDuration(clip.duration)}</span>
       ${index < 3 ? `<span class="rank">#${index + 1}</span>` : ''}
-      <button class="fav-btn${isFav ? ' active' : ''}" data-id="${clip.id}">${isFav ? '⭐' : '☆'}</button>
+      <button class="fav-btn${isFav ? ' active' : ''}" data-id="${clip.id}">${isFav ? '★' : '☆'}</button>
     </div>
     <div class="card-body">
       <div class="card-title">${title}</div>
@@ -513,7 +513,7 @@ async function toggleFav(clip, card) {
     const nowFav = state.favoriteIds.has(clip.id);
     card?.classList.toggle('is-fav', nowFav);
     const btn = card?.querySelector('.fav-btn');
-    if (btn) { btn.textContent = nowFav ? '⭐' : '☆'; btn.classList.toggle('active', nowFav); }
+    if (btn) { btn.textContent = nowFav ? '★' : '☆'; btn.classList.toggle('active', nowFav); }
     updateFavBadge();
     if (favsView.classList.contains('visible')) renderFavsGrid();
   } catch (e) {
@@ -540,7 +540,7 @@ async function renderFavsGrid() {
     const favs = await import('./db.js').then(m => m.getFavorites());
     favsGrid.innerHTML = '';
     if (favs.length === 0) {
-      favsGrid.innerHTML = `<div class="favs-empty"><div class="icon">☆</div><p>Aucun favori.<br>Clique l'étoile sur un clip pour l'ajouter.</p></div>`;
+      favsGrid.innerHTML = `<div class="favs-empty"><p>Aucun favori.<br>Clique l'étoile sur un clip pour l'ajouter.</p></div>`;
       return;
     }
     favs.forEach(({ clip_data }) => {
@@ -572,13 +572,13 @@ function setState(type, msg = '', count = 0) {
   countBadge.style.display = 'none';
   const pct = count > 0 ? Math.min((count / 2000) * 100, 95) : 0;
   if (type === 'idle') {
-    stateEl.innerHTML = `<div class="state-icon">🎮</div><p>Entre un nom de chaîne et clique <strong>Charger</strong></p>`;
+    stateEl.innerHTML = `<p>Entre un nom de chaîne et clique <strong>Charger</strong></p>`;
   } else if (type === 'loading') {
     stateEl.innerHTML = `
-      <div class="state-icon">⏳</div><p>${msg}</p>
+      <p>${msg}</p>
       <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>`;
   } else if (type === 'error') {
-    stateEl.innerHTML = `<div class="state-icon">⚠️</div><p>${msg}</p>`;
+    stateEl.innerHTML = `<p class="state-error">${msg}</p>`;
   }
 }
 

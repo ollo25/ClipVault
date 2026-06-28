@@ -47,17 +47,16 @@
     min-height: 100vh;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(ellipse at 50% 0%, #1a0a33 0%, var(--bg) 70%);
+    background: var(--bg);
   }
 
   .auth-box {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 8px;
     padding: 40px;
     width: 100%;
-    max-width: 420px;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    max-width: 400px;
   }
 
   .auth-logo {
@@ -160,17 +159,16 @@
     min-height: 100vh;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(ellipse at 50% 0%, #1a0a33 0%, var(--bg) 70%);
+    background: var(--bg);
   }
 
   .setup-box {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 8px;
     padding: 36px 40px;
     width: 100%;
-    max-width: 500px;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    max-width: 480px;
   }
 
   .setup-box h2 {
@@ -272,11 +270,9 @@
   }
 
   .channel-zone-label {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--purple);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--dim);
     white-space: nowrap;
   }
 
@@ -376,12 +372,10 @@
   #filter-bar.visible { display: flex; }
 
   #filter-bar::before {
-    content: "🔍 Filtres";
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--green);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    content: "Filtres";
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--dim);
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -468,8 +462,8 @@
     text-align: center;
     color: var(--dim);
   }
-  .state-icon { font-size: 40px; }
   #state p { font-size: 14px; line-height: 1.6; color: var(--muted); }
+  #state .state-error { color: #e05252; }
   #state a { color: var(--purple); }
 
   .progress-bar { width: 240px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
@@ -666,7 +660,7 @@
 <!-- ── Page Setup Twitch ─────────────────────────────────────────────────────── -->
 <div id="page-setup" class="page">
   <div class="setup-box">
-    <h2>🔑 Connecte ton compte Twitch</h2>
+    <h2>Connecte ton compte Twitch</h2>
     <p class="setup-desc">
       Pour accéder aux clips, tu dois lier ton compte Twitch une seule fois.
       Clique sur le bouton ci-dessous pour te connecter, ou entre manuellement ton Client ID et token.
@@ -707,7 +701,7 @@
     <div class="header-brand">Clip<span>Browser</span></div>
 
     <div class="channel-zone">
-      <span class="channel-zone-label">📡 Chaîne</span>
+      <span class="channel-zone-label">Chaîne</span>
       <input type="text" id="channel-input" placeholder="ex: nagatow" autocomplete="off" />
       <button id="btn-load">Charger</button>
     </div>
@@ -715,9 +709,9 @@
     <div class="header-right">
       <span class="count-badge" id="count-badge"></span>
       <button class="btn-icon gold" id="btn-favs">
-        ⭐ Favoris <span class="fav-count" id="fav-count">0</span>
+        Favoris <span class="fav-count" id="fav-count">0</span>
       </button>
-      <button class="btn-icon" id="btn-setup" title="Paramètres Twitch">⚙️</button>
+      <button class="btn-icon" id="btn-setup" title="Paramètres Twitch">Config</button>
       <span style="font-size:11px;color:var(--dim)" id="user-email"></span>
       <button class="btn-icon" id="btn-logout">Déconnexion</button>
     </div>
@@ -768,7 +762,6 @@
 
   <!-- État -->
   <div id="state">
-    <div class="state-icon">🎮</div>
     <p>Entre un nom de chaîne et clique <strong>Charger</strong></p>
   </div>
 
@@ -782,8 +775,8 @@
   <!-- Vue favoris -->
   <div id="favs-view">
     <div class="favs-header">
-      <h2>⭐ Mes favoris</h2>
-      <button class="btn-icon" id="btn-export-favs">⬇ Exporter JSON</button>
+      <h2>Mes favoris</h2>
+      <button class="btn-icon" id="btn-export-favs">Exporter JSON</button>
     </div>
     <div id="favs-grid"></div>
   </div>
@@ -791,14 +784,14 @@
   <!-- Logs -->
   <div id="log-panel">
     <div class="log-header">
-      <span>📋 LOGS</span>
-      <button class="btn-log" id="log-export-btn">⬇ Exporter</button>
-      <button class="btn-log" id="log-clear">🗑 Vider</button>
-      <button class="btn-log" id="log-close">✕</button>
+      <span>Logs</span>
+      <button class="btn-log" id="log-export-btn">Exporter</button>
+      <button class="btn-log" id="log-clear">Vider</button>
+      <button class="btn-log" id="log-close">×</button>
     </div>
     <div id="log-body"></div>
   </div>
-  <button id="log-toggle">📋 Logs</button>
+  <button id="log-toggle">Logs</button>
 
 </div>
 
