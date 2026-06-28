@@ -98,6 +98,14 @@
   }
   .btn-twitch:hover { background: var(--purple-dark); }
 
+  .auth-consent {
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--dim);
+    text-align: center;
+    line-height: 1.6;
+  }
+
   /* ── App page ── */
   #page-app { min-height: 100vh; }
 
@@ -423,6 +431,9 @@
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .btn-icon.danger { border-color: var(--red); color: var(--red); }
+  .btn-icon.danger:hover { background: #2a0a0a; }
 </style>
 </head>
 <body>
@@ -440,6 +451,11 @@
       </svg>
       Se connecter avec Twitch
     </button>
+    <p class="auth-consent">
+      Votre identifiant Twitch est utilisé pour créer un compte anonyme afin de
+      sauvegarder vos favoris. Aucune donnée personnelle n'est vendue ni partagée.
+      Vous pouvez supprimer toutes vos données depuis l'application à tout moment.
+    </p>
   </div>
 </div>
 
@@ -461,6 +477,7 @@
       <button class="btn-icon gold" id="btn-favs">
         Favoris <span class="fav-count" id="fav-count">0</span>
       </button>
+      <button class="btn-icon" id="btn-delete-data">Supprimer mes données</button>
       <button class="btn-icon" id="btn-logout">Déconnexion</button>
     </div>
   </header>

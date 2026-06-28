@@ -1,8 +1,10 @@
 // ─── Application principale ───────────────────────────────────────────────────
 import { isLoggedIn, signOut, handleTwitchCallback, startTwitchOAuth, loginWithTwitchUser } from './auth.js';
-import { getProfile, saveProfile, getFavoriteIds, addFavorite, removeFavorite } from './db.js';
+import { getFavoriteIds, addFavorite, removeFavorite, deleteAllFavorites } from './db.js';
 import { setTwitchCredentials, getBroadcasterInfo, fetchAllClips, validateToken, getTwitchUser } from './api.js';
 import { TWITCH_CLIENT_ID } from './config.js';
+
+const TWITCH_TOKEN_KEY = 'clipvault_twitch_token';
 
 // ── État global ───────────────────────────────────────────────────────────────
 const state = {
@@ -14,7 +16,6 @@ const state = {
   searchMode:    'all',
   cols:          1,
   renderedCards: new Map(),
-  profile:       null,
 };
 
 // ── Constantes virtual scroll ─────────────────────────────────────────────────
@@ -63,8 +64,7 @@ async function init() {
     try {
       const user = await getTwitchUser();
       await loginWithTwitchUser(user.id);
-      await saveProfile({ twitch_token: twitchToken });
-      state.profile = await getProfile();
+      localStorage.setItem(TWITCH_TOKEN_KEY, twitchToken);
     } catch (e) {
       showToast('Erreur de connexion : ' + e.message, 'error');
       showPage(pageAuth);
@@ -81,14 +81,7 @@ async function init() {
     return;
   }
 
-  try {
-    state.profile = await getProfile();
-  } catch {
-    showPage(pageAuth);
-    return;
-  }
-
-  const token = state.profile?.twitch_token;
+  const token = localStorage.getItem(TWITCH_TOKEN_KEY);
   if (!token) {
     startTwitchOAuth();
     return;
@@ -113,10 +106,41 @@ $('btn-twitch-login').addEventListener('click', startTwitchOAuth);
 
 btnLogout.addEventListener('click', async () => {
   await signOut();
+  localStorage.removeItem(TWITCH_TOKEN_KEY);
   state.allClips = [];
   state.filteredClips = [];
-  state.profile = null;
   showPage(pageAuth);
+});
+
+let deleteConfirmPending = false;
+let deleteConfirmTimer  = null;
+$('btn-delete-data').addEventListener('click', async () => {
+  if (!deleteConfirmPending) {
+    deleteConfirmPending = true;
+    const btn = $('btn-delete-data');
+    btn.textContent = 'Confirmer la suppression ?';
+    btn.classList.add('danger');
+    deleteConfirmTimer = setTimeout(() => {
+      deleteConfirmPending = false;
+      btn.textContent = 'Supprimer mes données';
+      btn.classList.remove('danger');
+    }, 4000);
+    return;
+  }
+  clearTimeout(deleteConfirmTimer);
+  deleteConfirmPending = false;
+  try {
+    await deleteAllFavorites();
+    await signOut();
+    localStorage.removeItem(TWITCH_TOKEN_KEY);
+    state.allClips = [];
+    state.filteredClips = [];
+    state.favoriteIds = new Set();
+    showPage(pageAuth);
+    showToast('Données supprimées', 'success');
+  } catch (e) {
+    showToast('Erreur : ' + e.message, 'error');
+  }
 });
 
 // ── Chargement clips ──────────────────────────────────────────────────────────

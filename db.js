@@ -77,6 +77,12 @@ export async function removeFavorite(clipId) {
   return supaFetch('DELETE', `/favorites?clip_id=eq.${clipId}`);
 }
 
+export async function deleteAllFavorites() {
+  const session = getSession();
+  if (!session) return;
+  return supaFetch('DELETE', `/favorites?user_id=eq.${session.user.id}`);
+}
+
 export async function isFavorite(clipId) {
   const data = await supaFetch('GET', `/favorites?clip_id=eq.${clipId}&select=clip_id&limit=1`);
   return data && data.length > 0;
