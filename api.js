@@ -39,6 +39,11 @@ export async function getBroadcasterInfo(login) {
   return d.data[0];
 }
 
+export async function getTwitchUser() {
+  const d = await twitchFetch('https://api.twitch.tv/helix/users');
+  return d.data?.[0] || null;
+}
+
 export async function validateToken() {
   if (!_token) return false;
   try {
