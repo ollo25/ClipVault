@@ -401,39 +401,53 @@ function createCard(clip, index) {
 }
 
 // ── Téléchargement MP4 ────────────────────────────────────────────────────────
-function getClipMp4Url(clip) {
-  if (!clip.thumbnail_url) return null;
-  const m = clip.thumbnail_url.match(/^(.*)-preview-\d+x\d+\.jpg/);
-  return m ? `${m[1]}.mp4` : null;
+// Client-Id public utilisé par le site web Twitch lui-même pour les requêtes GQL non-authentifiées.
+const TWITCH_GQL_CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+
+async function getClipPlaybackUrl(clip) {
+  const query = `
+    query VideoAccessToken_Clip($slug: ID!) {
+      clip(slug: $slug) {
+        playbackAccessToken(params: {platform: "web", playerBackend: "mediaplayer", playerType: "site"}) {
+          signature
+          value
+        }
+        videoQualities { quality sourceURL }
+      }
+    }`;
+  const res = await fetch('https://gql.twitch.tv/gql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Client-Id': TWITCH_GQL_CLIENT_ID },
+    body: JSON.stringify({ query, variables: { slug: clip.id } }),
+  });
+  if (!res.ok) throw new Error(`HTTP_${res.status}`);
+  const { data } = await res.json();
+  const c = data?.clip;
+  if (!c?.playbackAccessToken || !c.videoQualities?.length) throw new Error('Vidéo introuvable');
+
+  const best = [...c.videoQualities].sort((a, b) => Number(b.quality) - Number(a.quality))[0];
+  const { signature, value } = c.playbackAccessToken;
+  return `${best.sourceURL}?sig=${signature}&token=${encodeURIComponent(value)}`;
 }
 
-function sanitizeFilename(name) {
-  return (name || 'clip')
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 150) || 'clip';
-}
-
+// Le CDN vidéo de Twitch n'autorise pas les requêtes cross-origin (CORS) depuis un autre
+// domaine que twitch.tv : impossible de récupérer le blob pour le renommer automatiquement.
+// On ouvre donc la vidéo dans un nouvel onglet ; l'utilisateur l'enregistre via
+// clic droit → Enregistrer la vidéo sous, et peut la renommer avec le titre du clip.
 async function downloadClip(clip, btn) {
-  const mp4Url = getClipMp4Url(clip);
-  if (!mp4Url) { showToast('Lien vidéo introuvable pour ce clip', 'error'); return; }
-
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.textContent = '…';
   try {
-    const res = await fetch(mp4Url);
-    if (!res.ok) throw new Error(`HTTP_${res.status}`);
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
+    const url = await getClipPlaybackUrl(clip);
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `${sanitizeFilename(clip.title)}.mp4`;
+    a.target = '_blank';
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    showToast('Vidéo ouverte dans un nouvel onglet — clic droit → « Enregistrer sous » pour la télécharger', 'success');
   } catch (e) {
     showToast('Erreur de téléchargement : ' + e.message, 'error');
   } finally {
