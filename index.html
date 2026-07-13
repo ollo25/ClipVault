@@ -385,6 +385,16 @@
   .fav-btn:hover { background: rgba(0,0,0,0.85); transform: scale(1.15); }
   .fav-btn.active { background: rgba(245,166,35,0.2); color: var(--gold); }
 
+  .dl-btn {
+    position: absolute; top: 6px; right: 42px;
+    background: rgba(0,0,0,0.6); border: none; border-radius: 50%;
+    width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 14px; line-height: 1; color: #fff;
+    transition: background 0.15s, transform 0.15s; z-index: 2;
+  }
+  .dl-btn:hover { background: rgba(0,0,0,0.85); transform: scale(1.15); }
+  .dl-btn:disabled { cursor: default; opacity: 0.7; }
+
   .card-body { padding: 10px 12px 12px; }
   .card-title {
     font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.35;

@@ -370,6 +370,7 @@ function createCard(clip, index) {
       <img class="thumb" src="${clip.thumbnail_url || ''}" alt="" loading="lazy" />
       <span class="duration">${formatDuration(clip.duration)}</span>
       ${index < 3 ? `<span class="rank">#${index + 1}</span>` : ''}
+      <button class="dl-btn" data-id="${clip.id}" title="Télécharger en MP4">⬇</button>
       <button class="fav-btn${isFav ? ' active' : ''}" data-id="${clip.id}">${isFav ? '★' : '☆'}</button>
     </div>
     <div class="card-body">
@@ -391,7 +392,54 @@ function createCard(clip, index) {
     toggleFav(clip, card);
   });
 
+  card.querySelector('.dl-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    downloadClip(clip, e.currentTarget);
+  });
+
   return card;
+}
+
+// ── Téléchargement MP4 ────────────────────────────────────────────────────────
+function getClipMp4Url(clip) {
+  if (!clip.thumbnail_url) return null;
+  const m = clip.thumbnail_url.match(/^(.*)-preview-\d+x\d+\.jpg/);
+  return m ? `${m[1]}.mp4` : null;
+}
+
+function sanitizeFilename(name) {
+  return (name || 'clip')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 150) || 'clip';
+}
+
+async function downloadClip(clip, btn) {
+  const mp4Url = getClipMp4Url(clip);
+  if (!mp4Url) { showToast('Lien vidéo introuvable pour ce clip', 'error'); return; }
+
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const res = await fetch(mp4Url);
+    if (!res.ok) throw new Error(`HTTP_${res.status}`);
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `${sanitizeFilename(clip.title)}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    showToast('Erreur de téléchargement : ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
 }
 
 async function toggleFav(clip, card) {
